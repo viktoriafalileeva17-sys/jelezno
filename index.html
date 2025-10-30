@@ -161,6 +161,9 @@
     </div>
 
     <script>
+        // URL для отправки данных в Make
+        const MAKE_WEBHOOK_URL = "https://hook.us2.make.com/rvrd1usolxdcnicha3gv4va7mhwx0blf";
+
         // Получение DOM-элементов
         const stepTitle = document.getElementById('stepTitle');
         const step1Inputs = document.getElementById('step1Inputs');
@@ -216,112 +219,46 @@
         const runAIScanner = () => {
             const contactName = inputContactName.value.trim();
             const contactInfo = inputContactInfo.value.trim();
-
+            const signName = inputSignName.value.trim();
+            const activityScope = inputActivityScope.value.trim();
+            const marketplaceLink = inputMarketplaceLink.value.trim();
+            
             if (!contactName || !contactInfo) {
                 showCustomMessage("Внимание", "Пожалуйста, введите Ваше имя и контактный телефон/email. Это необходимо для разблокировки анализа.");
                 return;
             }
 
-            // Здесь в реальной системе данные улетают в CRM/n8n
-            console.log(`ЛИД: ${contactName}, Контакт: ${contactInfo}, Объект: ${inputSignName.value}`);
+            // 1. Формирование объекта данных для отправки
+            const leadData = {
+                lead_name: contactName,
+                contact_info: contactInfo,
+                object_name: signName,
+                scope: activityScope,
+                competitor_link: marketplaceLink,
+                source: "AI_Scanner_Landing",
+                timestamp: new Date().toISOString()
+            };
 
-            // Скрываем форму контактов и запускаем индикатор
+            // 2. Отправка данных на вебхук Make (асинхронно)
+            sendDataToMake(leadData);
+
+            // 3. Скрываем форму контактов и запускаем индикатор
             step2Contact.classList.add('hidden');
             stepTitle.textContent = "Анализ в процессе...";
 
-            // Запуск AI
-            startAnalysisSimulation();
+            // 4. Запуск симуляции AI
+            startAnalysisSimulation(signName, activityScope, marketplaceLink);
         };
 
-        // --- ЛОГИКА AI СКАНИРОВАНИЯ ---
-        const startAnalysisSimulation = () => {
-            const signName = inputSignName.value.trim();
-            const activityScope = inputActivityScope.value.trim();
-            const marketplaceLink = inputMarketplaceLink.value.trim();
-
-            loadingIndicator.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            
-            let currentStep = 0;
-            const totalSteps = loadingSteps.length;
-            
-            const simulateProgress = () => {
-                if (currentStep < totalSteps) {
-                    loadingText.textContent = loadingSteps[currentStep];
-                    currentStep++;
-                    progressBar.style.width = `${(currentStep / totalSteps) * 100}%`;
-                    setTimeout(simulateProgress, 500); 
-                } else {
-                    setTimeout(showResults, 500); 
-                }
-            };
-            
-            const showResults = () => {
-                loadingIndicator.classList.add('hidden');
-
-                const analysis = simulateAIAnalysis(signName, activityScope, marketplaceLink);
-
-                // Вывод результата
-                readinessScore.textContent = `${analysis.score}%`;
+        // --- ФУНКЦИЯ ОТПРАВКИ ДАННЫХ В MAKE ---
+        async function sendDataToMake(data) {
+            try {
+                const response = await fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
                 
-                // Динамический цвет
-                readinessScore.classList.remove('score-bg-low', 'score-bg-medium', 'score-bg-high');
-                if (analysis.score >= 85) {
-                    readinessScore.classList.add('score-bg-high'); 
-                } else if (analysis.score >= 70) {
-                    readinessScore.classList.add('score-bg-medium');
-                } else {
-                    readinessScore.classList.add('score-bg-low'); 
-                }
-                
-                aiConclusionTitle.innerHTML = `1. AI-Заключение по объекту **"${inputSignName.value.toUpperCase()}"**:`;
+                if (!response.ok) {
+                    console.error('Make webhook response not OK:', response.statusT
 
-                summaryText.innerHTML = analysis.summary.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                riskText.textContent = analysis.risk;
-                recommendationsList.innerHTML = analysis.recommendations.map(rec => `<li>${rec}</li>`).join('');
-
-                resultsSection.classList.remove('hidden');
-                stepTitle.textContent = "Результаты Стратегического Аудита";
-            };
-
-            simulateProgress();
-        };
-
-        // Логика AI скоринга (сохранена)
-        const simulateAIAnalysis = (name, scope, link) => {
-            let baseScore = 70;
-            let summary = `Объект **"${name.toUpperCase()}"** в сфере ${scope} требует многоуровневой защиты. Анализ показал, что ваш основной риск — **задержка** с подачей заявки, что может привести к потере приоритета.`;
-            let risk = 'Низкий. Название уникально, но требуется срочная фиксация классов и технологического описания.';
-            
-            if (scope.toLowerCase().includes('it') || scope.toLowerCase().includes('по') || scope.toLowerCase().includes('финтех') || scope.toLowerCase().includes('анализ')) {
-                baseScore += 18;
-                risk = 'Критический. Технология находится в зоне высокого интереса конкурентов. AI-проверка показала наличие 3-х похожих патентов, которые могут оспорить вашу **патентную чистоту**. Срочно нужна **защита алгоритма (ноу-хау)**!';
-                summary = `Требуется комплексная защита **НЕЙРО-ПЛАТФОРМЫ** (бренд + алгоритм). Ваш главный риск — **копирование конкурентами** функционала и оспаривание приоритета.`;
-            } else if (scope.toLowerCase().includes('изобретение') || scope.toLowerCase().includes('производство')) {
-                 baseScore += 10;
-                 risk = 'Средний. Есть риск нарушения прав третьих лиц. Рекомендуется провести дополнительную проверку на **патентную чистоту устройства** перед началом производства.';
-            }
-
-            if (baseScore > 90) {
-                 baseScore = 90; 
-            }
-
-            const recommendations = [
-                'Немедленно зафиксировать ключевые классы/формулу изобретения для получения приоритетной даты.',
-                'Провести ускоренную проверку на патентную чистоту по ключевым рынкам (РФ, СНГ).',
-                'Сформировать стратегию защиты от копирования алгоритмов и баз данных.',
-                'Проработать стратегию лицензирования и монетизации вашего объекта ИС.'
-            ];
-
-            return {
-                score: baseScore,
-                summary: summary,
-                risk: risk,
-                recommendations: recommendations
-            };
-        };
-
-        
-    </script>
-</body>
-</html>
